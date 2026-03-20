@@ -1,0 +1,74 @@
+version: "3.9"
+
+# ══════════════════════════════════════════════════════════════════
+#  PROYECTO: Hola Mundo — PHP + MySQL
+#  Servicios:
+#    • app   → Apache + PHP 8.2
+#    • mysql → MySQL 8.0
+# ══════════════════════════════════════════════════════════════════
+
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # PASO C ► Servicio de servidor de aplicación (PHP + Apache)
+  # ─────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hola_mundo_app
+    restart: unless-stopped
+    ports:
+      - "8080:80"            # http://localhost:8080
+    volumes:
+      - ./src:/var/www/html  # Monta el código fuente en tiempo real
+    environment:
+      DB_HOST:     mysql
+      DB_NAME:     holaMundoDB
+      DB_USER:     appuser
+      DB_PASSWORD: apppassword
+    depends_on:
+      mysql:
+        condition: service_healthy   # Espera a que MySQL esté listo
+    networks:
+      - app_network
+
+  # ─────────────────────────────────────────────────────────────
+  # PASO D ► Servicio de base de datos MySQL
+  # ─────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: hola_mundo_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword   # Contraseña root (NO usar en producción)
+      MYSQL_DATABASE:      holaMundoDB    # BD creada automáticamente al iniciar
+      MYSQL_USER:          appuser        # Usuario de la aplicación
+      MYSQL_PASSWORD:      apppassword    # Contraseña del usuario
+    ports:
+      - "3307:3306"          # Puerto 3307 en el host para no conflictar con MySQL local
+    volumes:
+      - mysql_data:/var/lib/mysql        # Persistencia de datos
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql  # Script SQL inicial
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "appuser", "-papppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app_network
+
+# ══════════════════════════════════════════════════════════════════
+#  VOLÚMENES — Persistencia de datos MySQL entre reinicios
+# ══════════════════════════════════════════════════════════════════
+volumes:
+  mysql_data:
+    driver: local
+
+# ══════════════════════════════════════════════════════════════════
+#  REDES — Red interna que conecta app ↔ mysql
+# ══════════════════════════════════════════════════════════════════
+networks:
+  app_network:
+    driver: bridge
